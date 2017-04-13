@@ -94,7 +94,7 @@ Turn on response body capture.
 capture_response_body_buffer_size
 --------------
 * **syntax**: `capture_response_body_buffer_size <size>`
-* **default**: `error`
+* **default**: `none`
 * **context**: `http,server,location`
 
 Maximum buffer size.
