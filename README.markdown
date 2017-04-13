@@ -75,7 +75,8 @@ http {
             proxy_pass http://test;
         }
     }
-}```
+}
+```
 
 [Back to TOC](#table-of-contents)
 
