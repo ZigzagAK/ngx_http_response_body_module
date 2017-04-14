@@ -378,6 +378,8 @@ ngx_http_response_body_create_loc_conf(ngx_conf_t *cf)
     conf->buffer_size = NGX_CONF_UNSET_SIZE;
     conf->headers_in = NGX_CONF_UNSET_PTR;
     conf->headers_in_count = NGX_CONF_UNSET_UINT;
+    conf->headers_out = NGX_CONF_UNSET_PTR;
+    conf->headers_out_count = NGX_CONF_UNSET_UINT;
     conf->statuses = NGX_CONF_UNSET_PTR;
     conf->statuses_count = NGX_CONF_UNSET_UINT;
     conf->capture_body = NGX_CONF_UNSET;
@@ -396,6 +398,8 @@ ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_size_value(conf->buffer_size, prev->buffer_size, (size_t) ngx_pagesize);
     ngx_conf_merge_ptr_value(conf->headers_in, prev->headers_in, NULL);
     ngx_conf_merge_uint_value(conf->headers_in_count, prev->headers_in_count, 0);
+    ngx_conf_merge_ptr_value(conf->headers_out, prev->headers_out, NULL);
+    ngx_conf_merge_uint_value(conf->headers_out_count, prev->headers_out_count, 0);
     ngx_conf_merge_ptr_value(conf->statuses, prev->statuses, NULL);
     ngx_conf_merge_uint_value(conf->statuses_count, prev->statuses_count, 0);
     ngx_conf_merge_value(conf->capture_body, prev->capture_body, 0);
