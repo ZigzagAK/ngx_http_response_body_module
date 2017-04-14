@@ -41,6 +41,8 @@ http {
     }
 
     capture_response_body on;
+    capture_response_body_if_request_header_in X-Trace=1;
+    capture_response_body_if_response_header_in X-Trace-Response=;
     capture_response_body_buffer_size 1m;
     capture_response_body_if_status_in 500 401 403 404;
     capture_response_body_if_latency_more 1s;
@@ -98,6 +100,22 @@ capture_response_body_buffer_size
 * **context**: `http,server,location`
 
 Maximum buffer size.
+
+capture_response_body_if_request_header_in
+--------------
+* **syntax**: `capture_response_body_if_request_header_in <Name=Value> ...`
+* **default**: `none`
+* **context**: `http,server,location`
+
+Capture response body only for specific http request headers.
+
+capture_response_body_if_response_header_in
+--------------
+* **syntax**: `capture_response_body_if_response_header_in <Name=Value> ...`
+* **default**: `none`
+* **context**: `http,server,location`
+
+Capture response body only for specific http request headers.
 
 capture_response_body_if_status_in
 --------------
