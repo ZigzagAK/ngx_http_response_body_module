@@ -40,9 +40,7 @@ http {
         server 127.0.0.1:9999;
     }
 
-    capture_response_body on;
-    capture_response_body_if_request_header_in X-Trace=1;
-    capture_response_body_if_response_header_in X-Trace-Response=;
+    capture_response_body off;
     capture_response_body_buffer_size 1m;
     capture_response_body_if_status_in 500 401 403 404;
     capture_response_body_if_latency_more 1s;
@@ -69,11 +67,27 @@ http {
                ngx.print('{"error":"internal error"}')
             }
         }
+        location /header_in {
+            echo 'OK';
+        }
+        location /header_out {
+            add_header X-Trace-Response 1;
+            echo 'OK';
+        }
     }
 
     server {
+        capture_response_body on;
         listen 8888;
         location / {
+            proxy_pass http://test;
+        }
+        location /header_in {
+            capture_response_body_if_request_header_in X-Trace=;
+            proxy_pass http://test;
+        }
+        location /header_out {
+            capture_response_body_if_response_header_in X-Trace-Response=;
             proxy_pass http://test;
         }
     }
