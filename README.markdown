@@ -33,6 +33,8 @@ http {
     default_type  application/octet-stream;
 
     log_format  main  '$remote_addr - $remote_user [$time_local] "$request" $status "$err" "$response_body"';
+    log_format  test  '$remote_addr - $remote_user [$time_local] "$request" $status "$err" "$test_response_body"';
+
 
     access_log  logs/access.log  main;
 
@@ -74,6 +76,10 @@ http {
             add_header X-Trace-Response 1;
             echo 'OK';
         }
+        location /test {
+            add_header X-Trace-Response 1;
+            echo 'OK';
+        }
     }
 
     server {
@@ -88,6 +94,12 @@ http {
         }
         location /header_out {
             capture_response_body_if_response_header_in X-Trace-Response=;
+            proxy_pass http://test;
+        }
+        location /test {
+            access_log  logs/test.log  test;
+            capture_response_body_var test_response_body;
+            capture_response_body_if_response_header_in X-Trace-Response=1;
             proxy_pass http://test;
         }
     }
@@ -106,6 +118,14 @@ capture_response_body
 * **context**: `http,server,location`
 
 Turn on response body capture.
+
+capture_response_body_var
+--------------
+* **syntax**: `capture_response_body_var <name>`
+* **default**: `request_body`
+* **context**: `http,server,location`
+
+Variable name.
 
 capture_response_body_buffer_size
 --------------

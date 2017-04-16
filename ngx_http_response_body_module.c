@@ -21,6 +21,7 @@ typedef struct {
     ngx_uint_t   statuses_count;
     size_t       buffer_size;
     ngx_flag_t   capture_body;
+    ngx_str_t    capture_body_var;
 } ngx_http_response_body_loc_conf_t;
 
 
@@ -40,6 +41,9 @@ ngx_http_response_body_variable(ngx_http_request_t *r,
 static void *ngx_http_response_body_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent,
     void *child);
+
+static char *
+ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 static char *
 ngx_http_response_body_statuses(ngx_conf_t *cf,
@@ -90,6 +94,13 @@ static ngx_command_t  ngx_http_response_body_commands[] = {
       ngx_conf_set_flag_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, capture_body),
+      NULL },
+
+    { ngx_string("capture_response_body_var"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_http_response_body_request_var,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      0,
       NULL },
 
     { ngx_string("capture_response_body_if_request_header_in"),
@@ -221,6 +232,31 @@ ngx_http_response_body_variable(ngx_http_request_t *r,
     v->len = b->last - b->start;
 
     return NGX_OK;
+}
+
+
+static char *
+ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_response_body_loc_conf_t *ulcf;
+    ngx_http_variable_t               *var;
+
+    ulcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_response_body_module);
+    if (ulcf == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    ulcf->capture_body_var = ((ngx_str_t *)cf->args->elts) [1];
+
+    var = ngx_http_add_variable(cf, &ulcf->capture_body_var, NGX_HTTP_VAR_NOCACHEABLE);
+    if (var == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    var->get_handler = ngx_http_response_body_variable;
+    var->data = 0;
+
+    return NGX_CONF_OK;
 }
 
 
