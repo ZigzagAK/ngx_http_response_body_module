@@ -19,6 +19,11 @@ typedef struct {
     ngx_uint_t   headers_out_count;
     ngx_uint_t  *statuses;
     ngx_uint_t   statuses_count;
+    ngx_flag_t   status_1xx;
+    ngx_flag_t   status_2xx;
+    ngx_flag_t   status_3xx;
+    ngx_flag_t   status_4xx;
+    ngx_flag_t   status_5xx;
     size_t       buffer_size;
     ngx_flag_t   capture_body;
     ngx_str_t    capture_body_var;
@@ -122,6 +127,41 @@ static ngx_command_t  ngx_http_response_body_commands[] = {
       ngx_http_response_body_statuses,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
+      NULL },
+
+    { ngx_string("capture_response_body_if_1xx"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, status_1xx),
+      NULL },
+
+    { ngx_string("capture_response_body_if_2xx"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, status_2xx),
+      NULL },
+
+    { ngx_string("capture_response_body_if_3xx"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, status_3xx),
+      NULL },
+
+    { ngx_string("capture_response_body_if_4xx"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, status_4xx),
+      NULL },
+
+    { ngx_string("capture_response_body_if_5xx"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, status_5xx),
       NULL },
 
     { ngx_string("capture_response_body_if_latency_more"),
@@ -290,7 +330,7 @@ ngx_http_response_body_request_header_in(ngx_conf_t *cf, ngx_command_t *cmd, voi
         {
             goto invalid_check_parameter;
         }
-        
+
         ulcf->headers_in[i-1].name.len = (u_char *) sep - value[i].data;
         ulcf->headers_in[i-1].name.data = value[i].data;
 
@@ -339,7 +379,7 @@ ngx_http_response_body_response_header_in(ngx_conf_t *cf, ngx_command_t *cmd, vo
         {
             goto invalid_check_parameter;
         }
-        
+
         ulcf->headers_out[i-1].name.len = (u_char *) sep - value[i].data;
         ulcf->headers_out[i-1].name.data = value[i].data;
 
@@ -418,6 +458,11 @@ ngx_http_response_body_create_loc_conf(ngx_conf_t *cf)
     conf->headers_out_count = NGX_CONF_UNSET_UINT;
     conf->statuses = NGX_CONF_UNSET_PTR;
     conf->statuses_count = NGX_CONF_UNSET_UINT;
+    conf->status_1xx = NGX_CONF_UNSET;
+    conf->status_2xx = NGX_CONF_UNSET;
+    conf->status_3xx = NGX_CONF_UNSET;
+    conf->status_4xx = NGX_CONF_UNSET;
+    conf->status_5xx = NGX_CONF_UNSET;
     conf->capture_body = NGX_CONF_UNSET;
 
     return conf;
@@ -438,6 +483,11 @@ ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_uint_value(conf->headers_out_count, prev->headers_out_count, 0);
     ngx_conf_merge_ptr_value(conf->statuses, prev->statuses, NULL);
     ngx_conf_merge_uint_value(conf->statuses_count, prev->statuses_count, 0);
+    ngx_conf_merge_value(conf->status_1xx, prev->status_1xx, 0);
+    ngx_conf_merge_value(conf->status_2xx, prev->status_2xx, 0);
+    ngx_conf_merge_value(conf->status_3xx, prev->status_3xx, 0);
+    ngx_conf_merge_value(conf->status_4xx, prev->status_4xx, 0);
+    ngx_conf_merge_value(conf->status_5xx, prev->status_5xx, 0);
     ngx_conf_merge_value(conf->capture_body, prev->capture_body, 0);
 
     return NGX_CONF_OK;
@@ -545,6 +595,28 @@ ngx_http_response_body_filter_header(ngx_http_request_t *r)
     ctx = ngx_http_get_module_ctx(r, ngx_http_response_body_module);
     if (ctx == NULL) {
         return ngx_http_next_header_filter(r);
+    }
+
+    if (r->headers_out.status < 200) {
+       if (ctx->conf->status_1xx) {
+            return ngx_http_next_header_filter(r);
+        }
+    } else if (r->headers_out.status < 300) {
+        if (ctx->conf->status_2xx) {
+            return ngx_http_next_header_filter(r);
+        }
+    } else if (r->headers_out.status < 400) {
+        if (ctx->conf->status_3xx) {
+            return ngx_http_next_header_filter(r);
+        }
+    } else if (r->headers_out.status < 500) {
+        if (ctx->conf->status_4xx) {
+            return ngx_http_next_header_filter(r);
+       }
+    } else {
+        if (ctx->conf->status_5xx) {
+            return ngx_http_next_header_filter(r);
+        }
     }
 
     if (ctx->conf->headers_in_count == 0 &&

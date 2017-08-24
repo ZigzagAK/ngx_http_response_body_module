@@ -159,6 +159,46 @@ capture_response_body_if_status_in
 
 Capture response body only for specific http statuses.
 
+capture_response_body_if_1xx
+--------------
+* **syntax**: `capture_response_body_if_1xx on`
+* **default**: `off`
+* **context**: `http,server,location`
+
+Capture response body for http statuses 1xx.
+
+capture_response_body_if_2xx
+--------------
+* **syntax**: `capture_response_body_if_2xx on`
+* **default**: `off`
+* **context**: `http,server,location`
+
+Capture response body for http statuses 2xx.
+
+capture_response_body_if_3xx
+--------------
+* **syntax**: `capture_response_body_if_3xx on`
+* **default**: `off`
+* **context**: `http,server,location`
+
+Capture response body for http statuses 3xx.
+
+capture_response_body_if_4xx
+--------------
+* **syntax**: `capture_response_body_if_4xx on`
+* **default**: `off`
+* **context**: `http,server,location`
+
+Capture response body for http statuses 4xx.
+
+capture_response_body_if_5xx
+--------------
+* **syntax**: `capture_response_body_if_5xx on`
+* **default**: `off`
+* **context**: `http,server,location`
+
+Capture response body for http statuses 5xx.
+
 capture_response_body_if_latency_more
 --------------
 * **syntax**: `capture_response_body_if_latency_more <sec>`

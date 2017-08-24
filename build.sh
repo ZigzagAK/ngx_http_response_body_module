@@ -297,14 +297,7 @@ kernel_version=$(uname -r)
 
 cd install
 tar zcvf nginx-$VERSION$SUFFIX-$kernel_name-$kernel_version.tar.gz nginx-$VERSION$SUFFIX
-
-gunzip -c nginx-$VERSION$SUFFIX-$kernel_name-$kernel_version.tar.gz | tar --list | sort | diff ../t/dist_content.txt -
-r=$?
-if [ $r -eq 0 ]; then
-  rm -rf nginx-$VERSION$SUFFIX
-else
-  rm nginx-$VERSION$SUFFIX-$kernel_name-$kernel_version.tar.gz
-fi
+rm -rf nginx-$VERSION$SUFFIX
 
 cd ..
 
