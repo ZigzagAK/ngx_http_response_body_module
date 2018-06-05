@@ -13,12 +13,9 @@ typedef struct ngx_pair_s ngx_pair_t;
 
 typedef struct {
     ngx_msec_t   latency;
-    ngx_pair_t  *headers_in;
-    ngx_uint_t   headers_in_count;
-    ngx_pair_t  *headers_out;
-    ngx_uint_t   headers_out_count;
-    ngx_uint_t  *statuses;
-    ngx_uint_t   statuses_count;
+    ngx_array_t *headers_in;
+    ngx_array_t *headers_out;
+    ngx_array_t *statuses;
     ngx_flag_t   status_1xx;
     ngx_flag_t   status_2xx;
     ngx_flag_t   status_3xx;
@@ -36,6 +33,15 @@ typedef struct {
 } ngx_http_response_body_ctx_t;
 
 
+static char *
+ngx_conf_set_flag(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
+static char *
+ngx_conf_set_msec(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
+static char *
+ngx_conf_set_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
 static ngx_int_t
 ngx_http_response_body_add_variables(ngx_conf_t *cf);
 
@@ -48,7 +54,8 @@ static char *ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent,
     void *child);
 
 static char *
-ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf);
 
 static char *
 ngx_http_response_body_statuses(ngx_conf_t *cf,
@@ -96,7 +103,7 @@ static ngx_command_t  ngx_http_response_body_commands[] = {
 
     { ngx_string("capture_response_body"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_flag_slot,
+      ngx_conf_set_flag,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, capture_body),
       NULL },
@@ -131,49 +138,49 @@ static ngx_command_t  ngx_http_response_body_commands[] = {
 
     { ngx_string("capture_response_body_if_1xx"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_flag_slot,
+      ngx_conf_set_flag,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, status_1xx),
       NULL },
 
     { ngx_string("capture_response_body_if_2xx"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_flag_slot,
+      ngx_conf_set_flag,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, status_2xx),
       NULL },
 
     { ngx_string("capture_response_body_if_3xx"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_flag_slot,
+      ngx_conf_set_flag,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, status_3xx),
       NULL },
 
     { ngx_string("capture_response_body_if_4xx"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_flag_slot,
+      ngx_conf_set_flag,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, status_4xx),
       NULL },
 
     { ngx_string("capture_response_body_if_5xx"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_flag_slot,
+      ngx_conf_set_flag,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, status_5xx),
       NULL },
 
     { ngx_string("capture_response_body_if_latency_more"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
+      ngx_conf_set_msec,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, latency),
       NULL },
 
     { ngx_string("capture_response_body_buffer_size"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_size_slot,
+      ngx_conf_set_size,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, buffer_size),
       NULL },
@@ -223,6 +230,78 @@ static ngx_http_variable_t  ngx_http_upstream_vars[] = {
     { ngx_null_string, NULL, NULL, 0, 0, 0 }
 
 };
+
+
+static char *
+ngx_conf_set_flag(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    char         *p = conf;
+    ngx_flag_t   *fp;
+    ngx_flag_t    prev = 0;
+    char         *rc;
+
+    fp = (ngx_flag_t *) (p + cmd->offset);
+
+    if (*fp != NGX_CONF_UNSET) {
+        prev = *fp;
+        *fp = NGX_CONF_UNSET;
+    }
+
+    rc = ngx_conf_set_flag_slot(cf, cmd, conf);
+    if (rc == NGX_CONF_OK) {
+        *fp = ngx_max(prev, *fp);
+    }
+
+    return rc;
+}
+
+
+char *
+ngx_conf_set_msec(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    char         *p = conf;
+    ngx_msec_t   *msp;
+    ngx_msec_t    prev = NGX_CONF_UNSET_MSEC;
+    char         *rc;
+
+    msp = (ngx_msec_t *) (p + cmd->offset);
+
+    if (*msp != NGX_CONF_UNSET_MSEC) {
+        prev = *msp;
+        *msp = NGX_CONF_UNSET_MSEC;
+    }
+
+    rc = ngx_conf_set_msec_slot(cf, cmd, conf);
+    if (rc == NGX_CONF_OK) {
+        *msp = ngx_min(prev, *msp);
+    }
+
+    return rc;
+}
+
+
+static char *
+ngx_conf_set_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    char         *p = conf;
+    size_t       *sp;
+    size_t        prev = 0;
+    char         *rc;
+
+    sp = (size_t *) (p + cmd->offset);
+
+    if (*sp != NGX_CONF_UNSET_SIZE) {
+        prev = *sp;
+        *sp = NGX_CONF_UNSET_SIZE;
+    }
+
+    rc = ngx_conf_set_size_slot(cf, cmd, conf);
+    if (rc == NGX_CONF_OK) {
+        *sp = ngx_max(prev, *sp);
+    }
+
+    return rc;
+}
 
 
 static ngx_int_t
@@ -276,19 +355,16 @@ ngx_http_response_body_variable(ngx_http_request_t *r,
 
 
 static char *
-ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf)
 {
-    ngx_http_response_body_loc_conf_t *ulcf;
+    ngx_http_response_body_loc_conf_t *ulcf = conf;
     ngx_http_variable_t               *var;
-
-    ulcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_response_body_module);
-    if (ulcf == NULL) {
-        return NGX_CONF_ERROR;
-    }
 
     ulcf->capture_body_var = ((ngx_str_t *)cf->args->elts) [1];
 
-    var = ngx_http_add_variable(cf, &ulcf->capture_body_var, NGX_HTTP_VAR_NOCACHEABLE);
+    var = ngx_http_add_variable(cf, &ulcf->capture_body_var,
+                                NGX_HTTP_VAR_NOCACHEABLE);
     if (var == NULL) {
         return NGX_CONF_ERROR;
     }
@@ -301,41 +377,34 @@ ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd, void *con
 
 
 static char *
-ngx_http_response_body_request_header_in(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_response_body_request_header_in(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf)
 {
     ngx_str_t                         *value;
-    ngx_http_response_body_loc_conf_t *ulcf;
+    ngx_http_response_body_loc_conf_t *ulcf = conf;
     char                              *sep;
     ngx_uint_t                         i;
-
-    ulcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_response_body_module);
-    if (ulcf == NULL) {
-        return NGX_CONF_ERROR;
-    }
+    ngx_pair_t                        *p;
 
     value = cf->args->elts;
 
-    ulcf->headers_in_count = cf->args->nelts - 1;
-    ulcf->headers_in = ngx_pcalloc(cf->pool, ulcf->headers_in_count * sizeof(ngx_pair_t));
-
-    if (ulcf->headers_in == NULL)
-    {
-        return NULL;
-    }
-
-    for (i = 1; i < cf->args->nelts; ++i)
-    {
+    for (i = 1; i < cf->args->nelts; ++i) {
         sep = ngx_strchr(value[i].data, '=');
-        if (sep == NULL)
-        {
+        if (sep == NULL) {
             goto invalid_check_parameter;
         }
 
-        ulcf->headers_in[i-1].name.len = (u_char *) sep - value[i].data;
-        ulcf->headers_in[i-1].name.data = value[i].data;
+        p = ngx_array_push(ulcf->headers_in);
+        if (p == NULL) {
+            return NULL;
+        }
 
-        ulcf->headers_in[i-1].value.len = (ngx_uint_t) ((value[i].data + value[i].len - (u_char *) sep) - 1);
-        ulcf->headers_in[i-1].value.data = (u_char *) sep + 1;
+        p->name.len = (u_char *) sep - value[i].data;
+        p->name.data = value[i].data;
+
+        p->value.len = (ngx_uint_t) ((value[i].data + value[i].len -
+            (u_char *) sep) - 1);
+        p->value.data = (u_char *) sep + 1;
     }
 
     return NGX_CONF_OK;
@@ -343,48 +412,41 @@ ngx_http_response_body_request_header_in(ngx_conf_t *cf, ngx_command_t *cmd, voi
 invalid_check_parameter:
 
     ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                       "invalid capture_response_body_if_request_header_in \"%V\"", &value[i]);
+        "invalid capture_response_body_if_request_header_in \"%V\"", &value[i]);
 
     return NGX_CONF_ERROR;
 }
 
 
 static char *
-ngx_http_response_body_response_header_in(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_response_body_response_header_in(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf)
 {
     ngx_str_t                         *value;
-    ngx_http_response_body_loc_conf_t *ulcf;
+    ngx_http_response_body_loc_conf_t *ulcf = conf;
     char                              *sep;
     ngx_uint_t                         i;
-
-    ulcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_response_body_module);
-    if (ulcf == NULL) {
-        return NGX_CONF_ERROR;
-    }
+    ngx_pair_t                        *p;
 
     value = cf->args->elts;
 
-    ulcf->headers_out_count = cf->args->nelts - 1;
-    ulcf->headers_out = ngx_pcalloc(cf->pool, ulcf->headers_out_count * sizeof(ngx_pair_t));
-
-    if (ulcf->headers_out == NULL)
-    {
-        return NULL;
-    }
-
-    for (i = 1; i < cf->args->nelts; ++i)
-    {
+    for (i = 1; i < cf->args->nelts; ++i) {
         sep = ngx_strchr(value[i].data, '=');
-        if (sep == NULL)
-        {
+        if (sep == NULL) {
             goto invalid_check_parameter;
         }
 
-        ulcf->headers_out[i-1].name.len = (u_char *) sep - value[i].data;
-        ulcf->headers_out[i-1].name.data = value[i].data;
+        p = ngx_array_push(ulcf->headers_out);
+        if (p == NULL) {
+            return NULL;
+        }
 
-        ulcf->headers_out[i-1].value.len = (ngx_uint_t) ((value[i].data + value[i].len - (u_char *) sep) - 1);
-        ulcf->headers_out[i-1].value.data = (u_char *) sep + 1;
+        p->name.len = (u_char *) sep - value[i].data;
+        p->name.data = value[i].data;
+
+        p->value.len = (ngx_uint_t) ((value[i].data + value[i].len -
+            (u_char *) sep) - 1);
+        p->value.data = (u_char *) sep + 1;
     }
 
     return NGX_CONF_OK;
@@ -392,7 +454,8 @@ ngx_http_response_body_response_header_in(ngx_conf_t *cf, ngx_command_t *cmd, vo
 invalid_check_parameter:
 
     ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                       "invalid capture_response_body_if_response_header_in \"%V\"", &value[i]);
+         "invalid capture_response_body_if_response_header_in \"%V\"",
+         &value[i]);
 
     return NGX_CONF_ERROR;
 }
@@ -402,28 +465,21 @@ static char *
 ngx_http_response_body_statuses(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_str_t                         *value;
-    ngx_http_response_body_loc_conf_t *ulcf;
+    ngx_http_response_body_loc_conf_t *ulcf = conf;
+    ngx_int_t                         *s;
     ngx_uint_t                         i;
-
-    ulcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_response_body_module);
-    if (ulcf == NULL) {
-        return NGX_CONF_ERROR;
-    }
 
     value = cf->args->elts;
 
-    ulcf->statuses_count = cf->args->nelts - 1;
-    ulcf->statuses = ngx_pcalloc(cf->pool, ulcf->statuses_count * sizeof(ngx_uint_t));
+    for (i = 1; i < cf->args->nelts; ++i) {
+        s = ngx_array_push(ulcf->statuses);
+        if (s == NULL) {
+            return NULL;
+        }
 
-    if (ulcf->statuses == NULL)
-    {
-        return NULL;
-    }
+        *s = ngx_atoi(value[i].data, value[i].len);
 
-    for (i = 1; i < cf->args->nelts; ++i)
-    {
-        ulcf->statuses[i-1] = ngx_atoi(value[i].data, value[i].len);
-        if (ulcf->statuses[i-1] == (ngx_uint_t) NGX_ERROR || ulcf->statuses[i-1] == 0) {
+        if (*s == (ngx_int_t) NGX_ERROR || *s < 100) {
             goto invalid_check_parameter;
         }
     }
@@ -433,7 +489,7 @@ ngx_http_response_body_statuses(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 invalid_check_parameter:
 
     ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                       "invalid capture_response_body_if_status_in \"%V\"", &value[i]);
+         "invalid capture_response_body_if_status_in \"%V\"", &value[i]);
 
     return NGX_CONF_ERROR;
 }
@@ -452,18 +508,27 @@ ngx_http_response_body_create_loc_conf(ngx_conf_t *cf)
 
     conf->latency = NGX_CONF_UNSET_MSEC;
     conf->buffer_size = NGX_CONF_UNSET_SIZE;
-    conf->headers_in = NGX_CONF_UNSET_PTR;
-    conf->headers_in_count = NGX_CONF_UNSET_UINT;
-    conf->headers_out = NGX_CONF_UNSET_PTR;
-    conf->headers_out_count = NGX_CONF_UNSET_UINT;
-    conf->statuses = NGX_CONF_UNSET_PTR;
-    conf->statuses_count = NGX_CONF_UNSET_UINT;
+    conf->headers_in = ngx_array_create(cf->pool, 10, sizeof(ngx_pair_t));
+    conf->headers_out = ngx_array_create(cf->pool, 10, sizeof(ngx_pair_t));
+    conf->statuses = ngx_array_create(cf->pool, 10, sizeof(ngx_int_t));
     conf->status_1xx = NGX_CONF_UNSET;
     conf->status_2xx = NGX_CONF_UNSET;
     conf->status_3xx = NGX_CONF_UNSET;
     conf->status_4xx = NGX_CONF_UNSET;
     conf->status_5xx = NGX_CONF_UNSET;
     conf->capture_body = NGX_CONF_UNSET;
+
+    if (conf->headers_in == NULL) {
+        return NULL;
+    }
+
+    if (conf->headers_out == NULL) {
+        return NULL;
+    }
+
+    if (conf->statuses == NULL) {
+        return NULL;
+    }
 
     return conf;
 }
@@ -476,13 +541,17 @@ ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_http_response_body_loc_conf_t *conf = child;
 
     ngx_conf_merge_msec_value(conf->latency, prev->latency, (ngx_msec_int_t) 0);
-    ngx_conf_merge_size_value(conf->buffer_size, prev->buffer_size, (size_t) ngx_pagesize);
-    ngx_conf_merge_ptr_value(conf->headers_in, prev->headers_in, NULL);
-    ngx_conf_merge_uint_value(conf->headers_in_count, prev->headers_in_count, 0);
-    ngx_conf_merge_ptr_value(conf->headers_out, prev->headers_out, NULL);
-    ngx_conf_merge_uint_value(conf->headers_out_count, prev->headers_out_count, 0);
-    ngx_conf_merge_ptr_value(conf->statuses, prev->statuses, NULL);
-    ngx_conf_merge_uint_value(conf->statuses_count, prev->statuses_count, 0);
+    ngx_conf_merge_size_value(conf->buffer_size, prev->buffer_size,
+                              (size_t) ngx_pagesize);
+    if (conf->headers_in->nelts == 0) {
+        conf->headers_in = prev->headers_in;
+    }
+    if (conf->headers_out->nelts == 0) {
+        conf->headers_out = prev->headers_out;
+    }
+    if (conf->statuses->nelts == 0) {
+        conf->statuses = prev->statuses;
+    }
     ngx_conf_merge_value(conf->status_1xx, prev->status_1xx, 0);
     ngx_conf_merge_value(conf->status_2xx, prev->status_2xx, 0);
     ngx_conf_merge_value(conf->status_3xx, prev->status_3xx, 0);
@@ -585,17 +654,23 @@ static ngx_int_t
 ngx_http_response_body_filter_header(ngx_http_request_t *r)
 {
     ngx_http_response_body_ctx_t *ctx;
-    ngx_uint_t                    status;
     ngx_uint_t                    i, j;
     ngx_list_part_t              *part;
     ngx_table_elt_t              *header;
     ngx_str_t                    *name;
     ngx_str_t                    *value;
+    ngx_int_t                    *statuses;
+    ngx_pair_t                   *headers_in;
+    ngx_pair_t                   *headers_out;
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_response_body_module);
     if (ctx == NULL) {
         return ngx_http_next_header_filter(r);
     }
+
+    statuses = ctx->conf->statuses->elts;
+    headers_in = ctx->conf->headers_in->elts;
+    headers_out = ctx->conf->headers_out->elts;
 
     if (r->headers_out.status < 200) {
        if (ctx->conf->status_1xx) {
@@ -619,27 +694,25 @@ ngx_http_response_body_filter_header(ngx_http_request_t *r)
         }
     }
 
-    if (ctx->conf->headers_in_count == 0 &&
-        ctx->conf->headers_out_count == 0 &&
-        ctx->conf->statuses_count == 0 &&
+    if (ctx->conf->headers_in->nelts == 0 &&
+        ctx->conf->headers_out->nelts == 0 &&
+        ctx->conf->statuses->nelts == 0 &&
         ctx->conf->latency == 0) {
         return ngx_http_next_header_filter(r);
     }
 
-    if (ctx->conf->statuses_count != 0) {
-        status = r->headers_out.status;
-        for (i = 0; i < ctx->conf->statuses_count; ++i) {
-            if (status == ctx->conf->statuses[i]) {
-                return ngx_http_next_header_filter(r);
-            }
+    for (i = 0; i < ctx->conf->statuses->nelts; ++i) {
+        if (r->headers_out.status == (ngx_uint_t) statuses[i]) {
+            return ngx_http_next_header_filter(r);
         }
     }
 
-    if (ctx->conf->latency != 0 && ctx->conf->latency <= ngx_http_response_body_request_time(r)) {
+    if (ctx->conf->latency != 0 &&
+        ctx->conf->latency <= ngx_http_response_body_request_time(r)) {
         return ngx_http_next_header_filter(r);
     }
 
-    if (ctx->conf->headers_in_count != 0) {
+    if (ctx->conf->headers_in->nelts != 0) {
         part = &r->headers_in.headers.part;
         header = part->elts;
 
@@ -658,18 +731,19 @@ ngx_http_response_body_filter_header(ngx_http_request_t *r)
                 continue;
             }
 
-            for (j = 0; j < ctx->conf->headers_in_count; ++j) {
-                name = &ctx->conf->headers_in[j].name;
+            for (j = 0; j < ctx->conf->headers_in->nelts; ++j) {
+                name = &headers_in[j].name;
 
                 if (header[i].key.len != name->len) {
                     continue;
                 }
 
-                if (ngx_strncasecmp(header[i].key.data, name->data, name->len) != 0) {
+                if (ngx_strncasecmp(header[i].key.data, name->data, name->len)
+                        != 0) {
                     continue;
                 }
 
-                value = &ctx->conf->headers_in[j].value;
+                value = &headers_in[j].value;
 
                 if (value->len == 0) {
                     return ngx_http_next_header_filter(r);
@@ -679,14 +753,15 @@ ngx_http_response_body_filter_header(ngx_http_request_t *r)
                     continue;
                 }
 
-                if (ngx_strncasecmp(header[i].value.data, value->data, value->len) == 0) {
+                if (ngx_strncasecmp(header[i].value.data,
+                                    value->data, value->len) == 0) {
                     return ngx_http_next_header_filter(r);
                 }
             }
         }
     }
 
-    if (ctx->conf->headers_out_count != 0) {
+    if (ctx->conf->headers_out->nelts != 0) {
         part = &r->headers_out.headers.part;
         header = part->elts;
 
@@ -705,18 +780,19 @@ ngx_http_response_body_filter_header(ngx_http_request_t *r)
                 continue;
             }
 
-            for (j = 0; j < ctx->conf->headers_out_count; ++j) {
-                name = &ctx->conf->headers_out[j].name;
+            for (j = 0; j < ctx->conf->headers_out->nelts; ++j) {
+                name = &headers_out[j].name;
 
                 if (header[i].key.len != name->len) {
                     continue;
                 }
 
-                if (ngx_strncasecmp(header[i].key.data, name->data, name->len) != 0) {
+                if (ngx_strncasecmp(header[i].key.data, name->data,
+                                    name->len) != 0) {
                     continue;
                 }
 
-                value = &ctx->conf->headers_out[j].value;
+                value = &headers_out[j].value;
 
                 if (value->len == 0) {
                     return ngx_http_next_header_filter(r);
@@ -726,7 +802,8 @@ ngx_http_response_body_filter_header(ngx_http_request_t *r)
                     continue;
                 }
 
-                if (ngx_strncasecmp(header[i].value.data, value->data, value->len) == 0) {
+                if (ngx_strncasecmp(header[i].value.data, value->data,
+                                    value->len) == 0) {
                     return ngx_http_next_header_filter(r);
                 }
             }
