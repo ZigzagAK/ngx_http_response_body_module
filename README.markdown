@@ -15,7 +15,7 @@ Table of Contents
 Status
 ======
 
-This library is under development.
+This library is production ready.
 
 Description
 ===========
