@@ -63,30 +63,19 @@ http {
     server {
         listen 7777;
         location / {
-            content_by_lua_block {
-               for i=1,10000
-               do
-                 ngx.print("0000000000")
-               end
-               ngx.sleep(1.5)
-            }
+            echo_sleep 1.5;
+            echo '0000000000';
         }
         location /500 {
-            content_by_lua_block {
-               ngx.status = ngx.HTTP_INTERNAL_SERVER_ERROR;
-               ngx.print('{"error":"internal error"}')
-            }
+            echo_status 500;
+            echo '{"error":"internal error"}';
         }
         location /200 {
-            content_by_lua_block {
-               ngx.print('OK')
-            }
+            echo OK;
         }
         location /404 {
-            content_by_lua_block {
-               ngx.status = ngx.HTTP_NOT_FOUND;
-               ngx.print('404')
-            }
+            echo_status 404;
+            echo '404';
         }
         location /header_in {
             echo 'OK';

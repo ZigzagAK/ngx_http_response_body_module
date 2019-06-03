@@ -11,9 +11,8 @@ build_deps=0
 
 DIR="$(pwd)"
 
-VERSION="1.13.6"
+VERSION="1.16.0"
 PCRE_VERSION="8.39"
-LUAJIT_VERSION="2.1.0-beta2"
 
 SUFFIX=""
 
@@ -21,12 +20,6 @@ BASE_PREFIX="$DIR/build"
 INSTALL_PREFIX="$DIR/install"
 
 PCRE_PREFIX="$DIR/build/pcre-$PCRE_VERSION"
-JIT_PREFIX="$DIR/build/deps/luajit"
-
-export LUAJIT_INC="$JIT_PREFIX/usr/local/include/luajit-2.1"
-export LUAJIT_LIB="$JIT_PREFIX/usr/local/lib"
-
-export LD_LIBRARY_PATH="$JIT_PREFIX/lib"
 
 function clean() {
   rm -rf install  2>/dev/null
@@ -41,29 +34,14 @@ if [ "$1" == "clean" ]; then
   exit 0
 fi
 
-function build_luajit() {
-  echo "Build luajit"
-  cd LuaJIT-$LUAJIT_VERSION
-  make -j 8 > /dev/null
-  r=$?
-  if [ $r -ne 0 ]; then
-    exit $r
-  fi
-  DESTDIR="$JIT_PREFIX" make install > /dev/null
-  cd ..
-}
-
 function build_debug() {
   cd nginx-$VERSION
   echo "Configuring debug nginx-$VERSION$SUFFIX"
   ./configure --prefix="$INSTALL_PREFIX/nginx-$VERSION$SUFFIX" \
               --with-pcre=$PCRE_PREFIX \
-              --with-stream \
               --with-debug \
-              --with-cc-opt="-O0 -DNO_NGX_STREAM_LUA_MODULE" \
+              --with-cc-opt="-O0 -g" \
               --add-module=../../../ngx_http_response_body_module \
-              --add-module=../ngx_devel_kit \
-              --add-module=../lua-nginx-module \
               --add-module=../echo-nginx-module > /dev/null
 
   r=$?
@@ -90,11 +68,7 @@ function build_release() {
   ./configure --prefix="$INSTALL_PREFIX/nginx-$VERSION$SUFFIX" \
               --with-pcre=$PCRE_PREFIX \
               --with-stream \
-              --with-debug \
-              --with-cc-opt="-DNO_NGX_STREAM_LUA_MODULE" \
               --add-module=../../../ngx_http_response_body_module \
-              --add-module=../ngx_devel_kit \
-              --add-module=../lua-nginx-module \
               --add-module=../echo-nginx-module > /dev/null
 
   r=$?
@@ -141,15 +115,6 @@ function download_nginx() {
   fi
 }
 
-function download_luajit() {
-  if [ $download -eq 1 ] || [ ! -e LuaJIT-$LUAJIT_VERSION.tar.gz ]; then
-    echo "Download LuaJIT-$LUAJIT_VERSION"
-    curl -s -L -O http://luajit.org/download/LuaJIT-$LUAJIT_VERSION.tar.gz
-  else
-    echo "Get LuaJIT-$LUAJIT_VERSION.tar.gz"
-  fi
-}
-
 function download_pcre() {
   if [ $download -eq 1 ] || [ ! -e pcre-$PCRE_VERSION.tar.gz ]; then
     echo "Download PCRE-$PCRE_VERSION"
@@ -176,16 +141,12 @@ function download() {
   mkdir build/deps           2>/dev/null
 
   mkdir download             2>/dev/null
-  mkdir download/lua_modules 2>/dev/null
 
   cd download
 
   download_nginx
-  download_luajit
   download_pcre
 
-  download_module simpl       ngx_devel_kit                    master
-  download_module openresty   lua-nginx-module                 master
   download_module openresty   echo-nginx-module                master
 
   cd ..
@@ -209,17 +170,11 @@ function install_files() {
 function build() {
   cd build
 
-  if [ $build_deps -eq 1 ] || [ ! -e deps/luajit ]; then
-    build_luajit
-  fi
-
-  make clean > /dev/null 2>&1
-  build_debug
+#  make clean > /dev/null 2>&1
+#  build_debug
 
   make clean > /dev/null 2>&1
   build_release
-
-  install_file  "$JIT_PREFIX/usr/local/lib"           .
 
   cd ..
 }
@@ -229,71 +184,12 @@ download
 extract_downloads
 build
 
-function install_resty_module() {
-  if [ -e $DIR/../$2 ]; then
-    echo "Get $DIR/../$2"
-    dir=$(pwd)
-    cd $DIR/..
-    zip -qr $dir/$2.zip $(ls -1d $2/* | grep -vE "(install$)|(build$)|(download$)|(.git$)")
-    cd $dir
-  else
-    if [ $6 -eq 1 ] || [ ! -e $2-$5.zip ] ; then
-      echo "Download $2 branch=$5"
-      rm -rf $2-$5 2>/dev/null
-      curl -s -L -O https://github.com/$1/$2/archive/$5.zip
-      mv $5.zip $2-$5.zip
-    else
-      echo "Get $2-$5"
-    fi
-  fi
-  echo "Install $2/$3"
-  if [ ! -e "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/$4" ]; then
-    mkdir -p "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/$4"
-  fi
-  if [ -e $2-$5.zip ]; then
-    unzip -q $2-$5.zip
-    cp -r $2-$5/$3 "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/$4/"
-    rm -rf $2-$5
-  elif [ -e $2-$5.tar.gz ]; then
-    tar zxf $2-$5.tar.gz
-    cp -r $2-$5/$3 "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/$4/"
-    rm -rf $2-$5
-  elif [ -e $2.zip ]; then
-    unzip -q $2.zip
-    cp -r $2/$3 "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/$4/"
-    rm -rf $2
-  elif [ -e $2.tar.gz ]; then
-    tar zxf $2.tar.gz
-    cp -r $2/$3 "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/$4/"
-    rm -rf $2
-  fi
-}
-
-function install_lua_modules() {
-  if [ $download -eq 1 ]; then
-    rm -rf download/lua_modules/* 2>/dev/null
-  fi
-
-  cd download/lua_modules
-
-  install_resty_module ZigzagAK     nginx-resty-auto-healthcheck-config scripts/start.sh    . master $download
-  install_resty_module ZigzagAK     nginx-resty-auto-healthcheck-config scripts/stop.sh     . master 0
-  install_resty_module ZigzagAK     nginx-resty-auto-healthcheck-config scripts/debug.sh    . master 0
-  install_resty_module ZigzagAK     nginx-resty-auto-healthcheck-config scripts/restart.sh  . master 0
-
-  cd ../..
-
-  install_file nginx.conf conf
-}
-
-install_lua_modules
-
-cp LICENSE "$INSTALL_PREFIX/nginx-$VERSION$SUFFIX/LICENSE"
-
 cd "$DIR"
 
 kernel_name=$(uname -s)
 kernel_version=$(uname -r)
+
+#exit 0
 
 cd install
 tar zcvf nginx-$VERSION$SUFFIX-$kernel_name-$kernel_version.tar.gz nginx-$VERSION$SUFFIX

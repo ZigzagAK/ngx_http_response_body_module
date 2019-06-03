@@ -62,6 +62,8 @@ ngx_conf_set_msec(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static char *
 ngx_conf_set_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
+static char *
+ngx_conf_set_keyval(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 static ngx_http_output_header_filter_pt  ngx_http_next_header_filter;
 static ngx_http_output_body_filter_pt    ngx_http_next_body_filter;
@@ -99,7 +101,7 @@ static ngx_command_t  ngx_http_response_body_commands[] = {
 
     { ngx_string("capture_response_body_if"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE2,
-      ngx_conf_set_keyval_slot,
+      ngx_conf_set_keyval,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, conditions),
       NULL },
@@ -203,9 +205,10 @@ static ngx_http_variable_t  ngx_http_upstream_vars[] = {
 static char *
 ngx_conf_set_flag(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    char        *p = conf;
-    ngx_flag_t  *fp = (ngx_flag_t *) (p + cmd->offset);
-    ngx_flag_t   prev = *fp;
+    ngx_http_response_body_loc_conf_t  *blcf = conf;
+    char                               *p = conf;
+    ngx_flag_t                         *fp = (ngx_flag_t *) (p + cmd->offset);
+    ngx_flag_t                          prev = *fp;
 
     *fp = NGX_CONF_UNSET;
 
@@ -215,6 +218,8 @@ ngx_conf_set_flag(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     if (prev != NGX_CONF_UNSET)
         *fp = ngx_max(prev, *fp);
 
+    blcf->capture_body = *fp;
+
     return NGX_CONF_OK;
 }
 
@@ -222,9 +227,10 @@ ngx_conf_set_flag(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 char *
 ngx_conf_set_msec(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    char        *p = conf;
-    ngx_msec_t  *fp = (ngx_msec_t *) (p + cmd->offset);
-    ngx_msec_t   prev = *fp;
+    ngx_http_response_body_loc_conf_t  *blcf = conf;
+    char                               *p = conf;
+    ngx_msec_t                         *fp = (ngx_msec_t *) (p + cmd->offset);
+    ngx_msec_t                          prev = *fp;
 
     *fp = NGX_CONF_UNSET_MSEC;
 
@@ -233,6 +239,8 @@ ngx_conf_set_msec(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     if (prev != NGX_CONF_UNSET_MSEC)
         *fp = ngx_min(prev, *fp);
+
+    blcf->capture_body = 1;
 
     return NGX_CONF_OK;
 }
@@ -252,6 +260,20 @@ ngx_conf_set_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     if (prev != NGX_CONF_UNSET_SIZE)
         *fp = ngx_max(prev, *fp);
+
+    return NGX_CONF_OK;
+}
+
+
+static char *
+ngx_conf_set_keyval(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_response_body_loc_conf_t  *blcf = conf;
+
+    if (ngx_conf_set_keyval_slot(cf, cmd, conf) != NGX_CONF_OK)
+        return NGX_CONF_ERROR;
+
+    blcf->capture_body = 1;
 
     return NGX_CONF_OK;
 }
