@@ -43,9 +43,6 @@ ngx_http_response_body_request_var(ngx_conf_t *cf, ngx_command_t *cmd,
 static ngx_int_t
 ngx_http_response_body_set_ctx(ngx_http_request_t *r);
 
-static ngx_int_t
-ngx_http_response_body_log(ngx_http_request_t *r);
-
 static ngx_int_t ngx_http_response_body_filter_header(ngx_http_request_t *r);
 static ngx_int_t ngx_http_response_body_filter_body(ngx_http_request_t *r,
     ngx_chain_t *in);
@@ -453,17 +450,6 @@ ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 static ngx_int_t
 ngx_http_response_body_init(ngx_conf_t *cf)
 {
-    ngx_http_handler_pt        *h;
-    ngx_http_core_main_conf_t  *cmcf;
-
-    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-
-    h = ngx_array_push(&cmcf->phases[NGX_HTTP_LOG_PHASE].handlers);
-    if (h == NULL)
-        return NGX_ERROR;
-
-    *h = ngx_http_response_body_log;
-
     ngx_http_next_header_filter = ngx_http_top_header_filter;
     ngx_http_top_header_filter = ngx_http_response_body_filter_header;
 
@@ -499,13 +485,6 @@ ngx_http_response_body_set_ctx(ngx_http_request_t *r)
 
     ngx_http_set_ctx(r, ctx, ngx_http_response_body_module);
 
-    return NGX_OK;
-}
-
-
-static ngx_int_t
-ngx_http_response_body_log(ngx_http_request_t *r)
-{
     return NGX_OK;
 }
 
