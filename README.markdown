@@ -130,7 +130,7 @@ Turn on response body capture.
 capture_response_body_var
 --------------
 * **syntax**: `capture_response_body_var <name>`
-* **default**: `request_body`
+* **default**: `response_body`
 * **context**: `http,server,location`
 
 Variable name.
