@@ -52,6 +52,8 @@ http {
 
     capture_response_body                   off;
     capture_response_body_buffer_size       1m;
+    capture_response_body_buffer_size_min   4k;
+    capture_response_body_buffer_size_multiplier   2;
     capture_response_body_if                $cond 1;
     capture_response_body_if_latency_more   1s;
 
@@ -138,10 +140,26 @@ Variable name.
 capture_response_body_buffer_size
 --------------
 * **syntax**: `capture_response_body_buffer_size <size>`
-* **default**: `none`
+* **default**: `pagesize`
 * **context**: `http,server,location`
 
 Maximum buffer size.
+
+capture_response_body_buffer_size_min
+--------------
+* **syntax**: `capture_response_body_buffer_size_min <size>`
+* **default**: `pagesize`
+* **context**: `http,server,location`
+
+Minimum amount of memory allocated for chunked response.
+
+capture_response_body_buffer_size_multiplier
+--------------
+* **syntax**: `capture_response_body_buffer_size_multiplier <n>`
+* **default**: `2`
+* **context**: `http,server,location`
+
+Reallocation multiplier.
 
 capture_response_body_if
 --------------

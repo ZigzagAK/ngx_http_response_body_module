@@ -11,6 +11,8 @@ typedef struct {
     ngx_flag_t    status_3xx;
     ngx_flag_t    status_4xx;
     ngx_flag_t    status_5xx;
+    size_t        buffer_size_min;
+    ngx_uint_t    buffer_size_multiplier;
     size_t        buffer_size;
     ngx_flag_t    capture_body;
     ngx_str_t     capture_body_var;
@@ -150,6 +152,20 @@ static ngx_command_t  ngx_http_response_body_commands[] = {
       ngx_conf_set_size,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_response_body_loc_conf_t, buffer_size),
+      NULL },
+
+    { ngx_string("capture_response_body_buffer_size_min"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_size,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, buffer_size_min),
+      NULL },
+
+    { ngx_string("capture_response_body_buffer_size_multiplier"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_response_body_loc_conf_t, buffer_size_multiplier),
       NULL },
 
       ngx_null_command
@@ -358,17 +374,20 @@ ngx_http_response_body_create_loc_conf(ngx_conf_t *cf)
     if (blcf == NULL)
         return NULL;
 
-    blcf->latency      = NGX_CONF_UNSET_MSEC;
-    blcf->buffer_size  = NGX_CONF_UNSET_SIZE;
-    blcf->conditions   = ngx_array_create(cf->pool, 10, sizeof(ngx_keyval_t));
-    blcf->cv           = ngx_array_create(cf->pool, 10,
+    blcf->latency                = NGX_CONF_UNSET_MSEC;
+    blcf->buffer_size            = NGX_CONF_UNSET_SIZE;
+    blcf->buffer_size_min        = NGX_CONF_UNSET_SIZE;
+    blcf->buffer_size_multiplier = NGX_CONF_UNSET_UINT;
+    blcf->conditions             = ngx_array_create(cf->pool, 2,
+        sizeof(ngx_keyval_t));
+    blcf->cv                     = ngx_array_create(cf->pool, 2,
         sizeof(ngx_http_complex_value_t));
-    blcf->status_1xx   = NGX_CONF_UNSET;
-    blcf->status_2xx   = NGX_CONF_UNSET;
-    blcf->status_3xx   = NGX_CONF_UNSET;
-    blcf->status_4xx   = NGX_CONF_UNSET;
-    blcf->status_5xx   = NGX_CONF_UNSET;
-    blcf->capture_body = NGX_CONF_UNSET;
+    blcf->status_1xx             = NGX_CONF_UNSET;
+    blcf->status_2xx             = NGX_CONF_UNSET;
+    blcf->status_3xx             = NGX_CONF_UNSET;
+    blcf->status_4xx             = NGX_CONF_UNSET;
+    blcf->status_5xx             = NGX_CONF_UNSET;
+    blcf->capture_body           = NGX_CONF_UNSET;
 
     if (blcf->conditions == NULL || blcf->cv == NULL)
         return NULL;
@@ -411,6 +430,10 @@ ngx_http_response_body_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_msec_value(conf->latency, prev->latency, (ngx_msec_int_t) 0);
     ngx_conf_merge_size_value(conf->buffer_size, prev->buffer_size,
                               (size_t) ngx_pagesize);
+    ngx_conf_merge_size_value(conf->buffer_size_min, prev->buffer_size_min,
+                              (size_t) ngx_pagesize);
+    ngx_conf_merge_uint_value(conf->buffer_size_multiplier,
+                              prev->buffer_size_multiplier, 2);
     if (ngx_array_merge(conf->conditions, prev->conditions) == NGX_ERROR)
         return NGX_CONF_ERROR;
     ngx_conf_merge_value(conf->status_1xx, prev->status_1xx, 0);
@@ -593,7 +616,7 @@ ngx_http_response_body_filter_body(ngx_http_request_t *r, ngx_chain_t *in)
 {
     ngx_http_response_body_ctx_t       *ctx;
     ngx_chain_t                        *cl;
-    ngx_buf_t                          *b;
+    ngx_buf_t                          *b, new_buf;
     ngx_http_response_body_loc_conf_t  *conf;
     size_t                              len;
     ssize_t                             rest;
@@ -608,19 +631,50 @@ ngx_http_response_body_filter_body(ngx_http_request_t *r, ngx_chain_t *in)
 
     if (b->start == NULL) {
 
-        b->start = ngx_palloc(r->pool, conf->buffer_size);
+        /* initial buffer alloc */
+
+        len = r->headers_out.content_length_n == -1 ? conf->buffer_size_min
+            : ngx_min((size_t) r->headers_out.content_length_n, conf->buffer_size);
+
+        ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+            "[ngx_http_response_body] content_length: %i",
+                r->headers_out.content_length_n);
+
+        b->start = ngx_palloc(r->pool, len);
         if (b->start == NULL)
             return NGX_ERROR;
 
-        b->end = b->start + conf->buffer_size;
+        b->end = b->start + len;
         b->pos = b->last = b->start;
     }
 
     for (cl = in; cl; cl = cl->next) {
 
         rest = b->end - b->last;
-        if (rest == 0)
-            break;
+
+        if (rest == 0) {
+            /* no space in buffer */
+            if ((size_t) (b->end - b->start) < conf->buffer_size
+                && r->headers_out.content_length_n == -1) {
+                /* we may allocate more space */
+                len = ngx_min(conf->buffer_size,
+                    conf->buffer_size_multiplier * (b->end - b->start));
+                ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+                    "[ngx_http_response_body] realloc: %ui -> %ui",
+                    (b->end - b->start), len);
+                ngx_memzero(&new_buf, sizeof(ngx_buf_t));
+                new_buf.start = ngx_palloc(r->pool, len);
+                if (new_buf.start == NULL)
+                    return NGX_ERROR;
+                new_buf.end = new_buf.start + len;
+                new_buf.last = ngx_copy(new_buf.start, b->start,
+                    b->end - b->start);
+                new_buf.pos = new_buf.start;
+                ngx_pfree(r->pool, b->start);
+                *b = new_buf;
+            } else
+                break;
+        }
 
         if (!ngx_buf_in_memory(cl->buf))
             continue;
