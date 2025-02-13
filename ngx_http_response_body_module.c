@@ -634,7 +634,7 @@ ngx_http_response_body_filter_body(ngx_http_request_t *r, ngx_chain_t *in)
 
         size_t len;
 
-        ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
             "[ngx_http_response_body] content_length: %i",
                 r->headers_out.content_length_n);
 
@@ -678,7 +678,7 @@ ngx_http_response_body_filter_body(ngx_http_request_t *r, ngx_chain_t *in)
 
             if (old_alloc < new_alloc) {
 
-                ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+                ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                     "[ngx_http_response_body] realloc: %ui -> %ui",
                         old_alloc, new_alloc);
 
