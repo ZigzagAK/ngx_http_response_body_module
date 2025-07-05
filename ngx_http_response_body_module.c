@@ -515,13 +515,18 @@ ngx_http_response_body_set_ctx(ngx_http_request_t *r)
 static ngx_msec_t
 ngx_http_response_body_request_time(ngx_http_request_t *r)
 {
-    ngx_time_t      *tp;
     ngx_msec_int_t   ms;
+
+#if (defined freenginx && nginx_version >= 1029000)
+    ms = (ngx_msec_int_t) (ngx_current_msec - r->start_time);
+#else
+    ngx_time_t      *tp;
 
     tp = ngx_timeofday();
 
     ms = (ngx_msec_int_t)
              ((tp->sec - r->start_sec) * 1000 + (tp->msec - r->start_msec));
+#endif
 
     return (ngx_msec_t) ngx_max(ms, 0);
 }
